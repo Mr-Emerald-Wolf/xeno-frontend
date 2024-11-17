@@ -35,20 +35,18 @@ interface Order {
   cost: string;
   customer: Customer;
 }
-interface ApiResponse {
-  data: Order[] | null;
-  error?: boolean;
-  message?: string;
-}
+
+// Updated to expect direct array response
+type ApiResponse = Order[] | { error: string; message: string };
 
 export default function OrdersPage() {
-  const { data: session, status } = useSession(); // Get session data and status from next-auth
+  const { data: session, status } = useSession();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (status === "loading") return; // Don't make the API call while the session is loading
+    if (status === "loading") return;
     if (!session) {
       setError("User not authenticated or customer ID not found.");
       setIsLoading(false);
@@ -61,28 +59,39 @@ export default function OrdersPage() {
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/orders/customer/${session.user?.id}`,
         );
 
-        // Check if there's an error or no orders found
-        if (response.data.error || response.data.data?.length === 0) {
-          setError(
-            response.data.message ?? "No orders found for this customer.",
-          );
-          setOrders([]);
-        } else {
-          if (response.data.data != null) setOrders(response.data.data);
+        // Check if the response is an array of orders
+        if (Array.isArray(response.data)) {
+          console.log("Fetched orders:", response.data);
+          setOrders(response.data);
           setError(null);
         }
+        // Check if the response is an error object
+        else if (
+          response.data &&
+          "error" in response.data &&
+          "message" in response.data
+        ) {
+          console.error("Error response from API:", response.data);
+          setError(response.data.message || "An unknown error occurred.");
+          setOrders([]);
+        } else {
+          // Handle unexpected response formats
+          throw new Error("Unexpected response format");
+        }
       } catch (err) {
-        setError(
-          "An error occurred while fetching orders. Please try again later.",
-        );
-        console.error(err);
+        console.error("Error fetching orders:", err);
+
+        const errorMessage =
+          "An error occurred while fetching orders. Please try again later.";
+        setError(errorMessage);
+        setOrders([]);
       } finally {
         setIsLoading(false);
       }
     };
 
     void fetchOrders();
-  }, [session, status]); // Depend on session and status
+  }, [session, status]);
 
   if (status === "loading" || isLoading) {
     return (
@@ -101,24 +110,21 @@ export default function OrdersPage() {
 
   if (error) {
     return (
-      <Alert variant="destructive" className="mx-auto mt-8 max-w-4xl">
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Error</AlertTitle>
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
-    );
-  }
-
-  if (orders.length === 0) {
-    return (
       <Card className="mx-auto mt-8 w-full max-w-4xl">
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-2xl font-bold">Orders</CardTitle>
+          <Link href="/orders/create">
+            <Button>
+              <Plus className="mr-2 h-4 w-4" /> Create Order
+            </Button>
+          </Link>
         </CardHeader>
         <CardContent>
-          <p className="text-center text-gray-500">
-            No orders found for this customer.
-          </p>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
     );
@@ -135,39 +141,47 @@ export default function OrdersPage() {
         </Link>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Order ID</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Order Date</TableHead>
-                <TableHead>Revenue</TableHead>
-                <TableHead>Cost</TableHead>
-                <TableHead>Profit</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orders.map((order) => (
-                <TableRow key={order.id}>
-                  <TableCell>{order.id}</TableCell>
-                  <TableCell>{order.customer.name}</TableCell>
-                  <TableCell>
-                    {new Date(order.orderDate).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>${parseFloat(order.revenue).toFixed(2)}</TableCell>
-                  <TableCell>${parseFloat(order.cost).toFixed(2)}</TableCell>
-                  <TableCell>
-                    $
-                    {(
-                      parseFloat(order.revenue) - parseFloat(order.cost)
-                    ).toFixed(2)}
-                  </TableCell>
+        {orders.length === 0 ? (
+          <p className="text-center text-gray-500">
+            No orders found for this customer.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Order ID</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Order Date</TableHead>
+                  <TableHead>Revenue</TableHead>
+                  <TableHead>Cost</TableHead>
+                  <TableHead>Profit</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {orders.map((order) => (
+                  <TableRow key={order.id}>
+                    <TableCell>{order.id}</TableCell>
+                    <TableCell>{order.customer.name}</TableCell>
+                    <TableCell>
+                      {new Date(order.orderDate).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      ${parseFloat(order.revenue).toFixed(2)}
+                    </TableCell>
+                    <TableCell>${parseFloat(order.cost).toFixed(2)}</TableCell>
+                    <TableCell>
+                      $
+                      {(
+                        parseFloat(order.revenue) - parseFloat(order.cost)
+                      ).toFixed(2)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
