@@ -35,6 +35,11 @@ interface Order {
   cost: string;
   customer: Customer;
 }
+interface ApiResponse {
+  data: Order[] | null;
+  error?: boolean;
+  message?: string;
+}
 
 export default function OrdersPage() {
   const { data: session, status } = useSession(); // Get session data and status from next-auth
@@ -52,13 +57,25 @@ export default function OrdersPage() {
 
     const fetchOrders = async () => {
       try {
-        const response = await axios.get<Order[]>(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/orders/customer/${session.user?.id}`
+        const response = await axios.get<ApiResponse>(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/orders/customer/${session.user?.id}`,
         );
-        setOrders(response.data);
+
+        // Check if there's an error or no orders found
+        if (response.data.error || response.data.data?.length === 0) {
+          setError(
+            response.data.message ?? "No orders found for this customer.",
+          );
+          setOrders([]);
+        } else {
+          if (response.data.data != null) setOrders(response.data.data);
+          setError(null);
+        }
       } catch (err) {
-        setError("An error occurred while fetching orders. Please try again later.");
-        console.log(err);
+        setError(
+          "An error occurred while fetching orders. Please try again later.",
+        );
+        console.error(err);
       } finally {
         setIsLoading(false);
       }
@@ -67,7 +84,7 @@ export default function OrdersPage() {
     void fetchOrders();
   }, [session, status]); // Depend on session and status
 
-  if (status === "loading") {
+  if (status === "loading" || isLoading) {
     return (
       <Card className="mx-auto mt-8 w-full max-w-4xl">
         <CardHeader>
@@ -89,6 +106,21 @@ export default function OrdersPage() {
         <AlertTitle>Error</AlertTitle>
         <AlertDescription>{error}</AlertDescription>
       </Alert>
+    );
+  }
+
+  if (orders.length === 0) {
+    return (
+      <Card className="mx-auto mt-8 w-full max-w-4xl">
+        <CardHeader>
+          <CardTitle className="text-2xl font-bold">Orders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-center text-gray-500">
+            No orders found for this customer.
+          </p>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -120,10 +152,17 @@ export default function OrdersPage() {
                 <TableRow key={order.id}>
                   <TableCell>{order.id}</TableCell>
                   <TableCell>{order.customer.name}</TableCell>
-                  <TableCell>{new Date(order.orderDate).toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    {new Date(order.orderDate).toLocaleDateString()}
+                  </TableCell>
                   <TableCell>${parseFloat(order.revenue).toFixed(2)}</TableCell>
                   <TableCell>${parseFloat(order.cost).toFixed(2)}</TableCell>
-                  <TableCell>${(parseFloat(order.revenue) - parseFloat(order.cost)).toFixed(2)}</TableCell>
+                  <TableCell>
+                    $
+                    {(
+                      parseFloat(order.revenue) - parseFloat(order.cost)
+                    ).toFixed(2)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

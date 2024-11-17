@@ -19,6 +19,12 @@ type Message = {
   updatedAt: string;
 };
 
+type ApiResponse = {
+  data: Message[] | null;
+  error?: boolean;
+  message?: string;
+};
+
 export default function CustomerMessages() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,15 +33,27 @@ export default function CustomerMessages() {
 
   useEffect(() => {
     const fetchMessages = async () => {
-      if (!session?.user?.id) return;
+      if (!session?.user?.id) {
+        setError("User not authenticated or customer ID not found.");
+        setIsLoading(false);
+        return;
+      }
 
       setIsLoading(true);
       try {
-        const response = await axios.get<Message[]>(
+        const response = await axios.get<ApiResponse>(
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/customers/messages/${session.user.id}`,
         );
-        setMessages(response.data);
-        setError(null);
+
+        if (response.data.error || !response.data.data) {
+          setError(
+            response.data.message ?? "No messages found for this customer.",
+          );
+          setMessages([]);
+        } else {
+          setMessages(response.data.data);
+          setError(null);
+        }
       } catch (err) {
         console.error("Error fetching messages:", err);
         setError("Failed to fetch messages. Please try again later.");
