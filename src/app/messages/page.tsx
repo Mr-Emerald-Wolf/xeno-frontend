@@ -19,11 +19,7 @@ type Message = {
   updatedAt: string;
 };
 
-type ApiResponse = {
-  data: Message[] | null;
-  error?: boolean;
-  message?: string;
-};
+type ApiResponse = Message[] | { error?: boolean; message?: string };
 
 export default function CustomerMessages() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -45,13 +41,17 @@ export default function CustomerMessages() {
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/customers/messages/${session.user.id}`,
         );
 
-        if (response.data.error || !response.data.data) {
+        // Check if the response is an error object or an array
+        if (Array.isArray(response.data)) {
+          setMessages(response.data);
+          setError(null);
+        } else if (response.data?.error || !response.data) {
           setError(
-            response.data.message ?? "No messages found for this customer.",
+            response.data?.message ?? "No messages found for this customer.",
           );
           setMessages([]);
         } else {
-          setMessages(response.data.data);
+          setMessages([]);
           setError(null);
         }
       } catch (err) {
